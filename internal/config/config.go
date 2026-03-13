@@ -11,9 +11,25 @@ import (
 )
 
 type Config struct {
-	Github    Github    `mapstructure:"github"`
-	Shortcuts Shortcuts `mapstructure:"keys"`
-	Settings  Settings  `mapstructure:"settings"`
+	Github         Github            `mapstructure:"github"`
+	Shortcuts      Shortcuts         `mapstructure:"keys"`
+	Settings       Settings          `mapstructure:"settings"`
+	CustomCommands []CustomCommand   `mapstructure:"custom_commands"`
+	// RepoPaths maps "owner/repo" slugs to absolute local filesystem paths.
+	// Only repos you actively work on locally need an entry.
+	// Supports ~ expansion (e.g. "~/Herd/my-app").
+	// Used to resolve {{.RepoPath}} in custom command templates.
+	RepoPaths map[string]string `mapstructure:"repo_paths"`
+}
+
+// CustomCommand adds an entry to the Repository tab's action bar.
+// Command supports Go template variables:
+//
+//   - {{.RepoName}} — the full "owner/repo" slug of the selected repository
+//   - {{.RepoPath}} — local path looked up from repo_paths; empty if not mapped
+type CustomCommand struct {
+	Description string `mapstructure:"description"`
+	Command     string `mapstructure:"command"`
 }
 
 type Settings struct {

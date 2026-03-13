@@ -14,3 +14,22 @@ settings:
   live_mode:
     enabled: true # to enable live mode at startup
     interval: 15s  # interval to refresh the page
+
+# repo_paths maps "owner/repo" slugs to their local clone paths.
+# Only repos you work on locally need an entry here.
+# Supports ~ expansion. Used to resolve {{.RepoPath}} in custom commands.
+# repos you don't list will simply get an empty {{.RepoPath}}.
+repo_paths:
+  "your-org/laravel-app": "~/Herd/laravel-app"
+  "your-org/react-app": "~/Frontend/react-app"
+
+# custom_commands adds numbered actions to the Repository tab's action bar,
+# right alongside "1) Open in browser".
+# Template variables:
+#   {{.RepoName}} — full "owner/repo" slug (e.g. "your-org/my-service")
+#   {{.RepoPath}} — local path looked up from repo_paths; empty if not mapped
+custom_commands:
+  - description: "Release"
+    command: "cd {{.RepoPath}} && ghrelease.sh"
+  - description: "List releases"
+    command: "gh release list --repo {{.RepoName}}"

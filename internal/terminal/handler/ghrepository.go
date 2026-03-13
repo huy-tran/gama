@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/termkit/gama/internal/config"
 	"github.com/termkit/gama/internal/github/domain"
 	gu "github.com/termkit/gama/internal/github/usecase"
 	"github.com/termkit/gama/pkg/browser"
@@ -47,6 +48,9 @@ type ModelGithubRepository struct {
 	status                      *ModelStatus
 	textInput                   textinput.Model
 	modelTabOptions             *ModelTabOptions
+
+	// Per-repo local path map used to resolve {{.RepoPath}} in custom command templates.
+	repoPaths map[string]string
 }
 
 // -----------------------------------------------------------------------------
@@ -56,6 +60,8 @@ type ModelGithubRepository struct {
 func SetupModelGithubRepository(s *skeleton.Skeleton, githubUseCase gu.UseCase) *ModelGithubRepository {
 	modelStatus := SetupModelStatus(s)
 	tabOptions := NewOptions(s, modelStatus)
+
+	cfg := loadConfig()
 
 	m := &ModelGithubRepository{
 		// Initialize core dependencies
@@ -73,6 +79,8 @@ func SetupModelGithubRepository(s *skeleton.Skeleton, githubUseCase gu.UseCase) 
 		selectedRepository:      NewSelectedRepository(),
 		syncRepositoriesContext: context.Background(),
 		cancelSyncRepositories:  func() {},
+
+		repoPaths: cfg.RepoPaths,
 	}
 
 	// Setup tables
@@ -121,6 +129,7 @@ func setupTextInput() textinput.Model {
 
 func (m *ModelGithubRepository) Init() tea.Cmd {
 	m.setupBrowserOption()
+	m.setupCustomCommandOptions(loadConfig())
 	go m.syncRepositories(m.syncRepositoriesContext)
 
 	return tea.Tick(time.Millisecond*100, func(t time.Time) tea.Msg {
@@ -137,6 +146,15 @@ func (m *ModelGithubRepository) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case initSyncMsg:
 		m.modelTabOptions.SetStatus(StatusIdle)
 		m.tableGithubRepository.SetCursor(0)
+		return m, nil
+	case execCustomCommandMsg:
+		return m, runCustomCommand(msg.cmdTemplate, msg.repoName, msg.repoPath)
+	case customCommandFinishedMsg:
+		if msg.err != nil {
+			m.status.SetErrorMessage(fmt.Sprintf("Command failed: %v", msg.err))
+		} else {
+			m.status.SetSuccessMessage("Command completed")
+		}
 		return m, nil
 	case tea.KeyMsg:
 		// Handle number keys for tab options
@@ -196,9 +214,6 @@ func (m *ModelGithubRepository) updateTable(msg tea.Msg) tea.Cmd {
 
 	// Handle table selection
 	m.handleTableInputs(m.syncRepositoriesContext)
-
-	m.modelTabOptions, cmd = m.modelTabOptions.Update(msg)
-	cmds = append(cmds, cmd)
 
 	return tea.Batch(cmds...)
 }
@@ -441,6 +456,25 @@ func (m *ModelGithubRepository) setupBrowserOption() {
 	}
 
 	m.modelTabOptions.AddOption("Open in browser", openInBrowser)
+}
+
+// setupCustomCommandOptions registers each custom_command from config as a numbered
+// tab option. When chosen, the callback sends execCustomCommandMsg back into the
+// Bubble Tea Update loop (via skeleton) so tea.ExecProcess can be returned as a Cmd.
+func (m *ModelGithubRepository) setupCustomCommandOptions(cfg *config.Config) {
+	for _, cc := range cfg.CustomCommands {
+		cmdTemplate := cc.Command   // capture per-iteration value
+		description := cc.Description
+		m.modelTabOptions.AddOption(description, func() {
+			repoName := m.selectedRepository.RepositoryName
+			repoPath := repoPathLookup(m.repoPaths, repoName)
+			m.skeleton.TriggerUpdateWithMsg(execCustomCommandMsg{
+				cmdTemplate: cmdTemplate,
+				repoName:    repoName,
+				repoPath:    repoPath,
+			})
+		})
+	}
 }
 
 // -----------------------------------------------------------------------------
