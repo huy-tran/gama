@@ -381,6 +381,7 @@ func (m *ModelGithubRepository) finalizeTableUpdate() {
 	m.tableReady = true
 	m.textInput.Focus()
 	m.status.SetSuccessMessage("Repositories fetched")
+	m.modelTabOptions.SetStatus(StatusIdle)
 
 	m.skeleton.TriggerUpdateWithMsg(initSyncMsg{})
 }
